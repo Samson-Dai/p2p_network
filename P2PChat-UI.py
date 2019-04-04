@@ -28,6 +28,7 @@ roomname = ''
 sockfd = socket.socket()
 keep_alive = False
 msid = ''
+join_msg = ''
 #
 # This is the hash function for generating a unique
 # Hash ID for each peer.
@@ -47,24 +48,16 @@ def sdbm_hash(instr):
 #
 # Auxiliary functions
 #
-def print_time( threadName, delay):
-   count = 0
-   while count < 5:
-      time.sleep(delay)
-      count += 1
-      print ("%s: %s" % ( threadName, time.ctime(time.time()) ))
-
 class keep_alive_thread (threading.Thread):
-	def __init__(self, msg):
+	def __init__(self):
 		threading.Thread.__init__(self)
-		self.msg = msg
 	def run(self):
 		while True:
 			time.sleep(20.0)
 			global sockfd
-			sockfd.send(self.msg.encode("ascii"))
+			global join_msg
+			sockfd.send(join_msg.encode("ascii"))
 			# CmdWin.insert(1.0, "\nKept alive")
-
 
 			try:
 				respond = sockfd.recv(1024).decode("ascii")
@@ -75,17 +68,19 @@ class keep_alive_thread (threading.Thread):
 				CmdWin.insert(1.0, "\n"+respond)
 				if respond[0] == 'M': # a list of group members in that group
 					# should check whether msid changed
-					
-					# update peer_list
-					global peer_list
-					try:
-						peer_list = respond.split("::")[0].split(':', 3)[2].split(':')
-					except IndexError:
-						peer_list = []
-
-					# update msid
 					global msid
-					msid = respond.split("::")[0].split(':')[1]
+					if respond.split(':')[1] != msid:
+						# update msid
+						msid = respond.split(':')[1]
+					
+						# update peer_list
+						global peer_list
+						try:
+							peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
+						except IndexError:
+							peer_list = []
+
+
 
 
 
@@ -169,9 +164,10 @@ def do_Join():
 
 			(add, port) = sockfd.getsockname()	
 
-			msg = "J:"+roomname+":"+username+":"+add+":"+str(port)+"::\r\n"
+			global join_msg
+			join_msg = "J:"+roomname+":"+username+":"+add+":"+str(port)+"::\r\n"
 
-			sockfd.send(msg.encode("ascii"))
+			sockfd.send(join_msg.encode("ascii"))
 
 			# try:
 			# 	sockfd.send(msg.encode("ascii"))
@@ -192,7 +188,8 @@ def do_Join():
 					# update peer_list
 					global peer_list
 					try:
-						peer_list = respond.split("::")[0].split(':', 3)[2].split(':')
+						peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
+						print(peer_list)
 					except IndexError:
 						peer_list = []
 
@@ -212,7 +209,7 @@ def do_Join():
 					joined = True
 
 					if keep_alive:
-						my_keep_alive_thread = keep_alive_thread(msg)
+						my_keep_alive_thread = keep_alive_thread()
 						my_keep_alive_thread.start()
 
 
@@ -237,6 +234,7 @@ def do_Poke():
 		try:
 			peer
 		except NameError: # nickname not provided
+			print(peer_list)
 			for i in range(0, len(peer_list)):
 				CmdWin.insert(1.0, "\n")
 				if i%3 == 0:
@@ -284,10 +282,15 @@ def do_Poke():
 
 def do_Quit():
 	CmdWin.insert(1.0, "\nPress Quit")
+
+	try:
+		my_keep_alive_thread.join()
+	except:
+		pass
 	try:
 		sockfd.close()
 	except:
-		sys.exit(0)
+		pass
 
 	sys.exit(0)
 
