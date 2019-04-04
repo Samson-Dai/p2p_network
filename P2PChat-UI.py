@@ -29,6 +29,7 @@ sockfd = socket.socket()
 keep_alive = False
 msid = ''
 join_msg = ''
+
 #
 # This is the hash function for generating a unique
 # Hash ID for each peer.
