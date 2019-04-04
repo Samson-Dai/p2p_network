@@ -27,7 +27,7 @@ username = ''
 roomname = ''
 sockfd = socket.socket()
 keep_alive = False
-
+msid = ''
 #
 # This is the hash function for generating a unique
 # Hash ID for each peer.
@@ -74,6 +74,19 @@ class keep_alive_thread (threading.Thread):
 			if respond:
 				CmdWin.insert(1.0, "\n"+respond)
 				if respond[0] == 'M': # a list of group members in that group
+					# should check whether msid changed
+					
+					# update peer_list
+					global peer_list
+					try:
+						peer_list = respond.split("::")[0].split(':', 3)[2].split(':')
+					except IndexError:
+						peer_list = []
+
+					# update msid
+					global msid
+					msid = respond.split("::")[0].split(':')[1]
+
 
 
 
@@ -176,10 +189,17 @@ def do_Join():
 			if respond:
 				CmdWin.insert(1.0, "\n"+respond)
 				if respond[0] == 'M': # a list of group members in that group
+					# update peer_list
+					global peer_list
 					try:
 						peer_list = respond.split("::")[0].split(':', 3)[2].split(':')
 					except IndexError:
 						peer_list = []
+
+					# update msid
+					global msid
+					msid = respond.split("::")[0].split(':')[1]
+
 					
 					global joined
 					global keep_alive
