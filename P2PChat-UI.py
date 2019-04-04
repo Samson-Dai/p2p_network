@@ -40,48 +40,46 @@ join_msg = ''
 # to this hash function
 #
 def sdbm_hash(instr):
-	hash = 0
-	for c in instr:
-		hash = int(ord(c)) + (hash << 6) + (hash << 16) - hash
-	return hash & 0xffffffffffffffff
+    hash = 0
+    for c in instr:
+        hash = int(ord(c)) + (hash << 6) + (hash << 16) - hash
+    return hash & 0xffffffffffffffff
 
 
 #
 # Auxiliary functions
 #
 class keep_alive_thread (threading.Thread):
-	def __init__(self):
-		threading.Thread.__init__(self)
-	def run(self):
-		while True:
-			time.sleep(20.0)
-			global sockfd
-			global join_msg
-			sockfd.send(join_msg.encode("ascii"))
-			# CmdWin.insert(1.0, "\nKept alive")
+    def __init__(self):
+        threading.Thread.__init__(self)
+    def run(self):
+        while True:
+            time.sleep(20.0)
+            global sockfd
+            global join_msg
+            sockfd.send(join_msg.encode("ascii"))
+            # CmdWin.insert(1.0, "\nKept alive")
 
-			try:
-				respond = sockfd.recv(1024).decode("ascii")
-			except socket.error as err:
-				print("Recv errror:", err)
+            try:
+                respond = sockfd.recv(1024).decode("ascii")
+            except socket.error as err:
+                print("Recv errror:", err)
 
-			if respond:
-				CmdWin.insert(1.0, "\n"+respond)
-				if respond[0] == 'M': # a list of group members in that group
-					# should check whether msid changed
-					global msid
-					if respond.split(':')[1] != msid:
-						# update msid
-						msid = respond.split(':')[1]
-					
-						# update peer_list
-						global peer_list
-						try:
-							peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
-						except IndexError:
-							peer_list = []
-
-
+            if respond:
+                CmdWin.insert(1.0, "\n"+respond)
+                if respond[0] == 'M': # a list of group members in that group
+                    # should check whether msid changed
+                    global msid
+                    if respond.split(':')[1] != msid:
+                        # update msid
+                        msid = respond.split(':')[1]
+                    
+                        # update peer_list
+                        global peer_list
+                        try:
+                            peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
+                        except IndexError:
+                            peer_list = []
 
 
 
@@ -91,209 +89,195 @@ class keep_alive_thread (threading.Thread):
 #
 
 def do_User():
-	#only available before join
+    #only available before join
 
-	if not joined:
-		if userentry.get():
-			global username
-			username = userentry.get()
-			outstr = "\n[User] username: " + username
-			CmdWin.insert(1.0, outstr)
-			userentry.delete(0, END)
-		else:
-			CmdWin.insert(1.0, "\nPlease input user name")
-
-
+    if not joined:
+        if userentry.get():
+            global username
+            username = userentry.get()
+            outstr = "\n[User] username: " + username
+            CmdWin.insert(1.0, outstr)
+            userentry.delete(0, END)
+        else:
+            CmdWin.insert(1.0, "\nPlease input user name")
 
 
 def do_List():
-	msg = "L::\r\n"
-	global sockfd
-	try:
-		sockfd.send(msg.encode("ascii"))
-	except:
-		sockfd.connect((sys.argv[1], int(sys.argv[2])))
-		CmdWin.insert(1.0, "\nConnected to room server")
-		sockfd.send(msg.encode("ascii"))
+    msg = "L::\r\n"
+    global sockfd
+    try:
+        sockfd.send(msg.encode("ascii"))
+    except:
+        sockfd.connect((sys.argv[1], int(sys.argv[2])))
+        CmdWin.insert(1.0, "\nConnected to room server at "+ sys.argv[1] + ":"+ sys.argv[2])
+        sockfd.send(msg.encode("ascii"))
 
-	try:
-		respond = sockfd.recv(50).decode("ascii")
-	except socket.error as err:
-		print("Recv errror:", err)
+    try:
+        respond = sockfd.recv(50).decode("ascii")
+    except socket.error as err:
+        print("Recv errror:", err)
 
-	if respond:
-		if respond[:3] == "G::":
-			CmdWin.insert(1.0, "\nNo active chatrooms")
-		elif respond[:2] == "G:":
-			room_list = respond.split("::")[0].split(':')[1:]
-			for room_name in room_list:
-				CmdWin.insert(1.0, "\n\t"+room_name)
-			CmdWin.insert(1.0, "\nHere are the active chatrooms:")
+    if respond:
+        if respond[:3] == "G::":
+            CmdWin.insert(1.0, "\nNo active chatrooms")
+        elif respond[:2] == "G:":
+            room_list = respond.split("::")[0].split(':')[1:]
+            for room_name in room_list:
+                CmdWin.insert(1.0, "\n\t"+room_name)
+            CmdWin.insert(1.0, "\nHere are the active chatrooms:")
 
-		else:
-			CmdWin.insert(1.0, "\nError: "+respond.split(':')[1])
+        else:
+            CmdWin.insert(1.0, "\nError: "+respond.split(':')[1])
 
 
 def do_Join():
-	if not username:
-		CmdWin.insert(1.0, "\nPlease input user name")
-	else: # username is ready
-		global roomname
-		roomname = userentry.get()
-		if not roomname:
-			CmdWin.insert(1.0, "\nPlease input room name")
-		else: # room name is entered in the entry box
-			userentry.delete(0, END)
+    if not username:
+        CmdWin.insert(1.0, "\nPlease input user name")
+    else: # username is ready
+        global roomname
+        roomname = userentry.get()
+        if not roomname:
+            CmdWin.insert(1.0, "\nPlease input room name")
+        else: # room name is entered in the entry box
+            userentry.delete(0, END)
 
-			global sockfd
-			# try:
-			# 	(add, port) = sockfd.getsockname()
-			# except:
-			# 	sockfd = socket.socket()
-			# 	try:
-			# 		sockfd.connect((sys.argv[1], int(sys.argv[2])))
-			# 	except socket.error as err:
-			# 		print("Connection error: ", err)
-			# 	else:
-			# 		CmdWin.insert(1.0, "\nConnected to room server")
-			# 		(add, port) = sockfd.getsockname()
+            global sockfd
 
-			(add, port) = sockfd.getsockname()
-			if add == '0.0.0.0': # TCP connection is not established
-				sockfd.connect((sys.argv[1], int(sys.argv[2])))
-				CmdWin.insert(1.0, "\nConnected to room server")
+            (add, port) = sockfd.getsockname()
+            if add == '0.0.0.0': # TCP connection is not established
+                sockfd.connect((sys.argv[1], int(sys.argv[2])))
+                CmdWin.insert(1.0, "\nConnected to room server")
+                (add, port) = sockfd.getsockname()  
 
-			(add, port) = sockfd.getsockname()	
+            global join_msg
+            join_msg = "J:"+roomname+":"+username+":"+add+":"+str(port)+"::\r\n"
 
-			global join_msg
-			join_msg = "J:"+roomname+":"+username+":"+add+":"+str(port)+"::\r\n"
+            sockfd.send(join_msg.encode("ascii"))
 
-			sockfd.send(join_msg.encode("ascii"))
-
-			# try:
-			# 	sockfd.send(msg.encode("ascii"))
-			# except: #  TCP connection has not been established
-			# 	sockfd.connect((sys.argv[1], int(sys.argv[2])))
-			# 	CmdWin.insert(1.0, "\nConnected to room server")
-			# 	sockfd.send(msg.encode("ascii"))
+            # try:
+            #   sockfd.send(msg.encode("ascii"))
+            # except: #  TCP connection has not been established
+            #   sockfd.connect((sys.argv[1], int(sys.argv[2])))
+            #   CmdWin.insert(1.0, "\nConnected to room server")
+            #   sockfd.send(msg.encode("ascii"))
 
 
-			try:
-				respond = sockfd.recv(1024).decode("ascii")
-			except socket.error as err:
-				print("Recv errror:", err)
+            try:
+                respond = sockfd.recv(1024).decode("ascii")
+            except socket.error as err:
+                print("Recv errror:", err)
 
-			if respond:
-				CmdWin.insert(1.0, "\n"+respond)
-				if respond[0] == 'M': # a list of group members in that group
-					# update peer_list
-					global peer_list
-					try:
-						peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
-						print(peer_list)
-					except IndexError:
-						peer_list = []
+            if respond:
+                CmdWin.insert(1.0, "\n"+respond)
+                if respond[0] == 'M': # a list of group members in that group
+                    # update peer_list
+                    global peer_list
+                    try:
+                        peer_list = respond.split("::")[0].split(':', 2)[2].split(':')
+                        print(peer_list)
+                    except IndexError:
+                        peer_list = []
 
-					# update msid
-					global msid
-					msid = respond.split("::")[0].split(':')[1]
+                    # update msid
+                    global msid
+                    msid = respond.split("::")[0].split(':')[1]
 
-					
-					global joined
-					global keep_alive
+                    
+                    global joined
+                    global keep_alive
 
-					if joined == False:
-						keep_alive = True
-					else:
-						keep_alive = False
+                    if joined == False:
+                        keep_alive = True
+                    else:
+                        keep_alive = False
 
-					joined = True
+                    joined = True
 
-					if keep_alive:
-						my_keep_alive_thread = keep_alive_thread()
-						my_keep_alive_thread.start()
+                    if keep_alive:
+                        my_keep_alive_thread = keep_alive_thread()
+                        my_keep_alive_thread.start()
 
 
 
-				#elif respond[0] == 'F': # encounters error, e.g. already joined another chatroom
+                #elif respond[0] == 'F': # encounters error, e.g. already joined another chatroom
 
 
 
 def do_Send():
-	CmdWin.insert(1.0, "\nPress Send")
+    CmdWin.insert(1.0, "\nPress Send")
 
 
 def do_Poke():
-	global joined
-	try:
-		joined
-	except NameError:
-		joined = False
-	
-	if joined:
-		peer = userentry.get()
-		try:
-			peer
-		except NameError: # nickname not provided
-			print(peer_list)
-			for i in range(0, len(peer_list)):
-				CmdWin.insert(1.0, "\n")
-				if i%3 == 0:
-					CmdWin.insert(1.0, peer_list[i]+"  ")
+    global joined
+    try:
+        joined
+    except NameError:
+        joined = False
+    
+    if joined:
+        peer = userentry.get()
+        try:
+            peer
+        except NameError: # nickname not provided
+            print(peer_list)
+            for i in range(0, len(peer_list)):
+                CmdWin.insert(1.0, "\n")
+                if i%3 == 0:
+                    CmdWin.insert(1.0, peer_list[i]+"  ")
 
-			CmdWin.insert(1.0, "\nWho do you want to send the poke?")
-		else: # nickname is provided
-			match = False
-			print(peer_list)
-			for i in range(0, len(peer_list)):
-				if i%3 == 0:
-					if peer_list[i] == peer:
-						match = True
-						peer_add = peer_list[i+1]
-						peer_port = int(peer_list[i+2])
+            CmdWin.insert(1.0, "\nWho do you want to send the poke?")
+        else: # nickname is provided
+            match = False
+            print(peer_list)
+            for i in range(0, len(peer_list)):
+                if i%3 == 0:
+                    if peer_list[i] == peer:
+                        match = True
+                        peer_add = peer_list[i+1]
+                        peer_port = int(peer_list[i+2])
 
-			if match:
-				sockpk = socket.socket()
-				msg = "K:"+roomname+":"+username+"::\r\n"
-				sockpk.sendto(bytes(msg, "utf-8"), (peer_add, peer_port))
-				CmdWin.insert(1.0, "\nHave sent a poke to "+peer)
+            if match:
+                sockpk = socket.socket()
+                msg = "K:"+roomname+":"+username+"::\r\n"
+                sockpk.sendto(bytes(msg, "utf-8"), (peer_add, peer_port))
+                CmdWin.insert(1.0, "\nHave sent a poke to "+peer)
 
-				sockpk.listen(5)
-				readList = [sockpk]
-				Rready, Wready, Eready = select.select(readList, [], [], 2.0)
-				if Rready:
-					for fd in Rready:
-						if fd == sockpk:
-							try:
-								new, who = fd.accept()
-							except socket.error as err:
-								print("Socket accept error: ", err)	
-							else:
-								data, addr = fd.recvfrom(1024)
-								#print ack
-				else:
-					CmdWin.insert(1.0, "\nNo ACK received")
-				sockpk.close()
+                sockpk.listen(5)
+                readList = [sockpk]
+                Rready, Wready, Eready = select.select(readList, [], [], 2.0)
+                if Rready:
+                    for fd in Rready:
+                        if fd == sockpk:
+                            try:
+                                new, who = fd.accept()
+                            except socket.error as err:
+                                print("Socket accept error: ", err) 
+                            else:
+                                data, addr = fd.recvfrom(1024)
+                                #print ack
+                else:
+                    CmdWin.insert(1.0, "\nNo ACK received")
+                sockpk.close()
 
-			else: # nickname is not a member of the chatroom network or is self
-				CmdWin.insert(1.0, "\nWrong nickname")
+            else: # nickname is not a member of the chatroom network or is self
+                CmdWin.insert(1.0, "\nWrong nickname")
 
-	CmdWin.insert(1.0, "\nPress Poke")
+    CmdWin.insert(1.0, "\nPress Poke")
 
 
 def do_Quit():
-	CmdWin.insert(1.0, "\nPress Quit")
+    CmdWin.insert(1.0, "\nPress Quit")
 
-	try:
-		my_keep_alive_thread.join()
-	except:
-		pass
-	try:
-		sockfd.close()
-	except:
-		pass
+    try:
+        my_keep_alive_thread.join()
+    except:
+        pass
+    try:
+        sockfd.close()
+    except:
+        pass
 
-	sys.exit(0)
+    sys.exit(0)
 
 
 #
@@ -345,12 +329,12 @@ CmdWin.config(yscrollcommand=bottscroll.set)
 bottscroll.config(command=CmdWin.yview)
 
 def main():
-	if len(sys.argv) != 4:
-		print("P2PChat.py <server address> <server port no.> <my port no.>")
-		sys.exit(2)
+    if len(sys.argv) != 4:
+        print("P2PChat.py <server address> <server port no.> <my port no.>")
+        sys.exit(2)
 
-	win.mainloop()
+    win.mainloop()
 
 if __name__ == "__main__":
-	main()
+    main()
 
