@@ -1,8 +1,8 @@
 #!/usr/bin/python3
 
-# Student name and No.:
-# Student name and No.:
-# Development platform:
+# Student name and No.: Zhang Yuqian 3035233565
+# Student name and No.: Dai Songcheng 3035232652
+# Development platform: Ubuntu 16.04
 # Python version:
 # Version:
 
