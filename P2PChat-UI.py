@@ -53,7 +53,7 @@ class keep_alive_thread (threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        while True:
+        while True:     #run for every 20 seconds 
             time.sleep(20.0)
             global sockfd
             global join_msg
@@ -83,15 +83,16 @@ class keep_alive_thread (threading.Thread):
 
 
 
-
 #
 # Functions to handle user input
 #
 
-def do_User():
-    #only available before join
-
-    if not joined:
+def do_User():   #only available before join
+    global joined
+    CmdWin.insert(1.0, "\n")
+    if joined:
+        CmdWin.insert(1.0, "\nCannot change username after JOINED")
+    else:
         if userentry.get():
             global username
             username = userentry.get()
@@ -103,6 +104,7 @@ def do_User():
 
 
 def do_List():
+    CmdWin.insert(1.0, "\n")
     msg = "L::\r\n"
     global sockfd
     try:
@@ -131,6 +133,7 @@ def do_List():
 
 
 def do_Join():
+    CmdWin.insert(1.0, "\n")
     if not username:
         CmdWin.insert(1.0, "\nPlease input user name")
     else: # username is ready
@@ -143,24 +146,17 @@ def do_Join():
 
             global sockfd
 
+            # get the IP address, & listening port of the requesting peer
             (add, port) = sockfd.getsockname()
             if add == '0.0.0.0': # TCP connection is not established
                 sockfd.connect((sys.argv[1], int(sys.argv[2])))
                 CmdWin.insert(1.0, "\nConnected to room server")
                 (add, port) = sockfd.getsockname()  
 
+            # send the joining request
             global join_msg
             join_msg = "J:"+roomname+":"+username+":"+add+":"+str(port)+"::\r\n"
-
             sockfd.send(join_msg.encode("ascii"))
-
-            # try:
-            #   sockfd.send(msg.encode("ascii"))
-            # except: #  TCP connection has not been established
-            #   sockfd.connect((sys.argv[1], int(sys.argv[2])))
-            #   CmdWin.insert(1.0, "\nConnected to room server")
-            #   sockfd.send(msg.encode("ascii"))
-
 
             try:
                 respond = sockfd.recv(1024).decode("ascii")
@@ -197,8 +193,6 @@ def do_Join():
                         my_keep_alive_thread = keep_alive_thread()
                         my_keep_alive_thread.start()
 
-
-
                 #elif respond[0] == 'F': # encounters error, e.g. already joined another chatroom
 
 
@@ -208,40 +202,30 @@ def do_Send():
 
 
 def do_Poke():
-    global joined
-    try:
-        joined
-    except NameError:
-        joined = False
+    global joined, roomname
+    CmdWin.insert(1.0, "\n")
     
-    if joined:
+    if not joined:
+        CmdWin.insert(1.0, "\nError: Please join a chatroom before poke!")
+    else:
+        nickname_list = peer_list[0::3]
         peer = userentry.get()
-        try:
-            peer
-        except NameError: # nickname not provided
-            print(peer_list)
-            for i in range(0, len(peer_list)):
-                CmdWin.insert(1.0, "\n")
-                if i%3 == 0:
-                    CmdWin.insert(1.0, peer_list[i]+"  ")
+        if peer:        # the peer name is provided 
+            if peer== username:     # if input self's name 
+                CmdWin.insert(1.0, "\nError: Cannot poke self!")
+            elif peer not in nickname_list:     # peer not in this room
+                CmdWin.insert(1.0, "\nError:"+peer +" is not in this chatroom!")
+            else: # find peer
+                peer_index = peer_list.index(peer)
+                peer_address = peer_list[peer_index+1]
+                peer_port = peer_list[peer_index+2]
+                poke_msg = "K:"+roomname+":"+peer+"::\r\n"
 
-            CmdWin.insert(1.0, "\nWho do you want to send the poke?")
-        else: # nickname is provided
-            match = False
-            print(peer_list)
-            for i in range(0, len(peer_list)):
-                if i%3 == 0:
-                    if peer_list[i] == peer:
-                        match = True
-                        peer_add = peer_list[i+1]
-                        peer_port = int(peer_list[i+2])
-
-            if match:
-                sockpk = socket.socket()
-                msg = "K:"+roomname+":"+username+"::\r\n"
-                sockpk.sendto(bytes(msg, "utf-8"), (peer_add, peer_port))
+                sockpk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP socket
+                sockpk.sendto(bytes(poke_msg, "utf-8"), (peer_address, int(peer_port)))
                 CmdWin.insert(1.0, "\nHave sent a poke to "+peer)
 
+                '''
                 sockpk.listen(5)
                 readList = [sockpk]
                 Rready, Wready, Eready = select.select(readList, [], [], 2.0)
@@ -258,13 +242,16 @@ def do_Poke():
                 else:
                     CmdWin.insert(1.0, "\nNo ACK received")
                 sockpk.close()
-
-            else: # nickname is not a member of the chatroom network or is self
-                CmdWin.insert(1.0, "\nWrong nickname")
-
-    CmdWin.insert(1.0, "\nPress Poke")
+                '''
 
 
+        else:       # the peer name is not provided, print all the members in the chatroom 
+            for p_name in nickname_list:
+                CmdWin.insert(1.0, "\n" + p_name)
+            CmdWin.insert(1.0, "\nPlease enter a peer's name!")
+
+
+        
 def do_Quit():
     CmdWin.insert(1.0, "\nPress Quit")
 
