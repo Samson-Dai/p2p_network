@@ -82,6 +82,42 @@ class keep_alive_thread (threading.Thread):
                             peer_list = []
 
 
+class listen_to_request(threading.Thread):
+    def __init__(self):
+        threading.Thread.__init__(self)
+    def run(self):
+        # Create a datagram socket
+        udp_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
+         
+        # Bind to address and ip
+        udp_server_index = peer_list.index(username)
+        udp_server_address = peer_list[udp_server_index+1]
+        udp_server_port = peer_list[udp_server_index+2]
+        udp_server_socket.bind((udp_server_address, int(udp_server_port)))
+
+        udp_buffer_size =  1024
+        udp_respond =  "A::\r\n"
+
+        # Listen for incoming datagrams
+        while(True):
+            try:
+                udp_client_pair = udp_server_socket.recvfrom(udp_buffer_size)
+            except socket.error as err:
+                print("UDP recv errror:", err)
+
+            if udp_client_pair:
+                CmdWin.insert(1.0, "\n")
+                udp_client_msg = udp_client_pair[0].decode("ascii")
+                udp_client_ip = udp_client_pair[1]
+                udp_client_name = udp_client_msg.split("::")[0].split(':')[2]
+
+                CmdWin.insert(1.0, "\nReceived a poke from " + udp_client_name)
+                MsgWin.insert(1.0, "\n~~~~[" + udp_client_name+ "]Poke~~~~")
+
+                # Sending a UDP reply to client
+                udp_server_socket.sendto(udp_respond.encode("ascii"), udp_client_ip)
+
+
 
 #
 # Functions to handle user input
@@ -145,7 +181,6 @@ def do_Join():
             userentry.delete(0, END)
 
             global sockfd
-
             # get the IP address, & listening port of the requesting peer
             (add, port) = sockfd.getsockname()
             if add == '0.0.0.0': # TCP connection is not established
@@ -193,6 +228,9 @@ def do_Join():
                         my_keep_alive_thread = keep_alive_thread()
                         my_keep_alive_thread.start()
 
+                    my_listen_thread = listen_to_request()
+                    my_listen_thread.start()
+
                 #elif respond[0] == 'F': # encounters error, e.g. already joined another chatroom
 
 
@@ -219,36 +257,23 @@ def do_Poke():
                 peer_index = peer_list.index(peer)
                 peer_address = peer_list[peer_index+1]
                 peer_port = peer_list[peer_index+2]
-                poke_msg = "K:"+roomname+":"+peer+"::\r\n"
+                poke_msg = "K:"+roomname+":"+username+"::\r\n"
 
                 sockpk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP socket
-                sockpk.sendto(bytes(poke_msg, "utf-8"), (peer_address, int(peer_port)))
+
+                sockpk.sendto(poke_msg.encode("ascii"), (peer_address, int(peer_port)))
                 CmdWin.insert(1.0, "\nHave sent a poke to "+peer)
 
-                '''
-                sockpk.listen(5)
-                readList = [sockpk]
-                Rready, Wready, Eready = select.select(readList, [], [], 2.0)
-                if Rready:
-                    for fd in Rready:
-                        if fd == sockpk:
-                            try:
-                                new, who = fd.accept()
-                            except socket.error as err:
-                                print("Socket accept error: ", err) 
-                            else:
-                                data, addr = fd.recvfrom(1024)
-                                #print ack
-                else:
-                    CmdWin.insert(1.0, "\nNo ACK received")
-                sockpk.close()
-                '''
-
+                sockpk.settimeout(2)    # settimeout for 2 seconds for receiving
+                try:
+                    upd_server_respond = sockpk.recv(1024).decode("ascii")
+                    CmdWin.insert(1.0, "\nReceived ACK from "+ peer)
+                except socket.timeout as e:
+                    CmdWin.insert(1.0, "\nNo ACK received, time out!")
 
         else:       # the peer name is not provided, print all the members in the chatroom 
-            for p_name in nickname_list:
-                CmdWin.insert(1.0, "\n" + p_name)
-            CmdWin.insert(1.0, "\nPlease enter a peer's name!")
+            CmdWin.insert(1.0, "\n" + ' '.join(nickname_list))
+            CmdWin.insert(1.0, "\nTo whom do you want to send the poke?")
 
 
         
