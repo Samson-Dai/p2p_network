@@ -219,12 +219,14 @@ class listen_to_tcp(threading.Thread):
                                     if int(messageID_rcv) > msgID: # a new message incoming
                                         msg = extract_message(rmsgs)  # extracting the msg content 
 
+                                        print("the message is" + msg)
+
                                         with lock_messageID:
                                             msgID = int(messageID_rcv)
                                             last_message = rmsgs
 
                                         #display msg
-                                        CmdWin.insert(1.0, "\n[" + sending_user + "] " + msg)
+                                        MsgWin.insert(1.0, "\n[" + sending_user + "] " + msg)
 
                                         # relay the msg to my  peers
                                         send_msg(message.decode("ascii"))
