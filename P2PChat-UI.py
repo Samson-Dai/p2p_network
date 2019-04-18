@@ -33,7 +33,6 @@ last_message = "" # content of last message
 forward_link = ('','','')  #name, add, port
 joined = False
 keep_alive = False
-quit = False
 connected = False
 
 
@@ -78,7 +77,7 @@ class listen_to_udp_request(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        global peer_list, username, udp_server_socket, quit
+        global peer_list, username, udp_server_socket
         
         # Bind to address and ip
         udp_server_index = peer_list.index(username)
@@ -91,7 +90,7 @@ class listen_to_udp_request(threading.Thread):
         udp_respond =  "A::\r\n"
 
         # Listen for incoming datagrams
-        while not quit:
+        while True:
             try:
                 udp_client_pair = udp_server_socket.recvfrom(udp_buffer_size)
             except socket.error as err:
@@ -120,7 +119,7 @@ class listen_to_tcp(threading.Thread):
         tcp_server_socket = socket.socket()
 
         with lock_peer_list:
-            pList = peer_list
+            pList = copy.deepcopy(peer_list)
 
         tcp_server_index = pList.index(username)
         tcp_server_address = pList[tcp_server_index+1]
@@ -172,7 +171,6 @@ class listen_to_tcp(threading.Thread):
                             print("Recv error: ", err)
 
                         if message:
-                            
                             if message.decode("ascii").split(':')[0] == 'P':
                             # if a hand-shaking request  
                                 peer_name = message.decode("ascii").split(':')[2]
@@ -196,28 +194,32 @@ class listen_to_tcp(threading.Thread):
 
                             elif message.decode("ascii").split(':')[0] == 'T':
                             # if a TEXT msg
-                                print("in handle_receiving_message, the received message is", rmsg.decode("ascii"), "from ", str(sock.getpeername()))
-                                rmsgs = rmsg.decode('ascii').split(":")
+                                print("in handle_receiving_message, the received message is", message.decode("ascii"), "from ", str(sock.getpeername()))
+                                rmsgs = message.decode('ascii').split(":")
                                 text_roomname  =  rmsgs[1]
                                 if text_roomname != roomname:   # not in the same chatroom
                                     CmdWin.insert(1.0, "\n Error: Received message not from this chatroom.")
                                 else:
-                                        sending_user = rmsgs[3]
-                                        messageID_rcv = rmsgs[4]
-                                        CmdWin.insert(1.0, "\nReceived message from " + sending_user)
-                                        print("Received message from " + sending_user)
-                                        if int(messageID_rcv) > msgID: # a new message incoming
-                                            msg = rmsgs[6]  # extracting the msg content
-                                            with lock_messageID:
-                                                msgID = int(messageID_rcv)
-                                                last_message = rmsg
+                                    sending_user = rmsgs[3]
+                                    messageID_rcv = rmsgs[4]
+                                    CmdWin.insert(1.0, "\nReceived message from " + sending_user)
+                                    print("Received message from " + sending_user)
 
-                                            #todo    
-                                            with lock_send_message:
-                                                need_to_send_msg = True
-                                            CmdWin.insert(1.0, "\n[" + sending_user + "] " + msg)
-                                        else:
-                                            CmdWin.insert(1.0, "\nError: This message has been received before.")
+                                    if int(messageID_rcv) > msgID: # a new message incoming
+                                        msg = extract_message(rmsgs)  # extracting the msg content 
+
+                                        with lock_messageID:
+                                            msgID = int(messageID_rcv)
+                                            last_message = rmsg
+
+                                        #display msg
+                                        CmdWin.insert(1.0, "\n[" + sending_user + "] " + msg)
+
+                                        # relay the msg to my  peers
+                                        send_msg(message.decode("ascii"))
+                                            
+                                    else:
+                                        CmdWin.insert(1.0, "\nError: This message has been received before.")
 
                         else:
                             print("A connection is broken")
@@ -233,7 +235,7 @@ class forward_connect(threading.Thread):
         global peer_list, forward_link, lock_peer_list
         while True:
             with lock_peer_list:
-                pList = peer_list
+                pList = copy.deepcopy(peer_list)
 
             # check if the previous forward link is still in the chatroom
             if forward_link[0] not in pList:
@@ -277,7 +279,7 @@ def update_socket_list():
     global my_socket_list, peer_list
 
     with lock_peer_list:
-        pList = peer_list
+        pList = copy.deepcopy(peer_list)
 
     temp_socket_list = copy.deepcopy(my_socket_list)
     for socket_member in my_socket_list:
@@ -293,14 +295,14 @@ def is_room_mate(peer_name):
     global peer_list
 
     with lock_peer_list:
-        pList = peer_list
+        pList = copy.deepcopy(peer_list)
     
     if peer_name in pList:
         return True
     else:
         send_join_msg()
         with lock_peer_list:
-            pList = peer_name
+            pList = copy.deepcopy(peer_list)
 
         return peer_name in pList
 
@@ -312,7 +314,7 @@ def connect() :
 
     while not connected:
         with lock_peer_list:
-            pList = peer_list
+            pList = copy.deepcopy(peer_list)
 
         # get my info
         my_index = pList.index(username)
@@ -389,6 +391,31 @@ def connect() :
         # Cannot establish forward links now, reschedule  
         #print("reschedule connection later")
         time.sleep(10.0)
+
+
+# send message to all connecting peers
+def send_msg(msg):
+    global my_socket_list
+
+    send_list = copy.deepcopy(my_socket_list)
+    CmdWin.insert(1.0, "\nRelay the message to other peers")
+    for sock in send_list:
+        try:
+            sock.send(msg.encode('ascii'))
+            print("Send message to " + str(sock.getpeername()))
+            print(msg + '\n')
+        except socket.error as err:
+            print("Error in broadcasting message: ", err)
+            CmdWin.insert(1.0, "\nError in broadcasting message out.")
+
+
+# extracting received TEXT message (handling ':' problem)
+def extract_message(msg):
+    result = msg[6]
+    if len(msg) - 2 > 6:
+        for i in range(7, len(msg) - 2):
+            result += ":" + msg[i]
+    return result
 
 
 
@@ -508,11 +535,8 @@ def do_Join():
                         my_tcp_listen_thread.start()
 
 
-
-
-
 def do_Send():
-    global roomname, username, joined, room_member_list, socket_list, messageID
+    global roomname, username, joined, my_socket_list, msgID
     CmdWin.insert(1.0, "\n")
 
     msg_to_send = userentry.get()
@@ -522,23 +546,28 @@ def do_Send():
         if not joined: # the user has not joined any chatroom yet
             CmdWin.insert(1.0, "\nNot in any chatroom yet. Join one first.")
         else:
-            msgID += 1
+            with lock_messageID:
+                msgID += 1
 
-            #Ivy
-            hid = 0xffffffffffffffff
-            for member in room_member_list:
-                if member[0] == username:
-                    hid = member[3]
-            msgLength = len(msg)
+            with lock_peer_list:
+                pList = copy.deepcopy(peer_list)
+
+            # get my info
+            my_index = pList.index(username)
+            my_add = pList[my_index+1]
+            my_port = pList[my_index+2]
+            my_hash = sdbm_hash(username+my_add+my_port)
+            
+            msgLength = len(msg_to_send)
 
             # forward the message together with msgID to every connecting peer
-            smsg = "T:" + roomname + ":" + str(hid) + ":" + username + ":" + str(messageID) + ":" + str(msgLength) + ":" + msg + "::\r\n"
+            smsg = "T:" + roomname + ":" + str(my_hash) + ":" + username + ":" + str(msgID) + ":" + str(msgLength) + ":" + msg_to_send + "::\r\n"
 
-            print("number of sockets in socket_list: ", len(socket_list))
+            print("number of sockets in socket_list: ", len(my_socket_list))
             send_msg(smsg)
 
             # display username and message content to MsgWin
-            MsgWin.insert(1.0, "\n[" + username + "] " + msg)
+            MsgWin.insert(1.0, "\n[" + username + "] " + msg_to_send)
 
 
 def do_Poke():
@@ -583,19 +612,16 @@ def do_Poke():
             CmdWin.insert(1.0, "\nTo whom do you want to send the poke?")
 
 
-        
 def do_Quit():
+    global  my_socket_list, socket_room_server, udp_server_socket
+
+    # close sockets
+    socket_room_server.close()
+    udp_server_socket.close()
+    for sock in my_socket_list:
+        sock.close()
+
     CmdWin.insert(1.0, "\nPress Quit")
-
-    try:
-        my_keep_alive_thread.join()
-    except:
-        pass
-    try:
-        socket_room_server.close()
-    except:
-        pass
-
     sys.exit(0)
 
 
