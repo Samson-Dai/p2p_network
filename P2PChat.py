@@ -136,8 +136,8 @@ class listen_to_tcp(threading.Thread):
             read_list = [tcp_server_socket]
             for sock_tuple in my_socket_list:
                 read_list.append(sock_tuple[0]) 
-
-            print("Read List: " + str(read_list))
+            #print("Read List: " + str(read_list))
+            
             # use select to implement listening
             Rready, Wready, Eready = select.select(read_list, [], [], 1.0)
 
