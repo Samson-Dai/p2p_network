@@ -38,9 +38,7 @@ connected = False
 
 ## sockets 
 my_socket_list = []         # the list of sockets used by forward link and backward links, [(peer,socket)] 
-read_list = []
 socket_room_server = socket.socket()        #socket used to connect with room server
-tcp_server_socket = socket.socket()
 udp_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)    #tcp socket for POKE
 
 ## locks
@@ -116,11 +114,13 @@ class listen_to_tcp(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        global lock_peer_list, username, peer_list, roomname, receiving_message, msgID, lock_messageID, read_list, tcp_server_socket
+        global lock_peer_list, username, peer_list, roomname, receiving_message, msgID, lock_messageID, read_list
 
         with lock_peer_list:
             pList = copy.deepcopy(peer_list)
 
+
+        tcp_server_socket = socket.socket()
         tcp_server_index = pList.index(username)
         tcp_server_address = pList[tcp_server_index+1]
         tcp_server_port = pList[tcp_server_index+2]
@@ -131,10 +131,13 @@ class listen_to_tcp(threading.Thread):
         # listen
         tcp_server_socket.listen(5)
 
-        read_list = [tcp_server_socket]
 
         while True:
+            read_list = [tcp_server_socket]
+            for sock_tuple in my_socket_list:
+                read_list.append(sock_tuple[0]) 
 
+            print("Read List: " + str(read_list))
             # use select to implement listening
             Rready, Wready, Eready = select.select(read_list, [], [], 1.0)
 
@@ -156,10 +159,9 @@ class listen_to_tcp(threading.Thread):
                         except socket.error as err:
                             print("Socket accept error: ", err)
 
-                        my_socket_list.append((new,who[1]))
-                        read_list.append(new)
-                        
+                        print("TCP Connection established ")
 
+                        my_socket_list.append((new,who[1]))
 
                     # else is a client socket being ready
                     # that means a message is waiting or
@@ -176,7 +178,9 @@ class listen_to_tcp(threading.Thread):
 
                         if message:
                             if message.decode("ascii").split(':')[0] == 'P':
-                            # if a hand-shaking request  
+                            # if a hand-shaking request 
+
+                                print("Receive handshaking msg " +message.decode("ascii") ) 
                                 peer_name = message.decode("ascii").split(':')[2]
 
                                 if is_room_mate(peer_name) and peer_name != forward_link[0]:
@@ -291,8 +295,6 @@ def update_socket_list():
     if forward_link[0] not in pList:    # try to reconnect if forward link quits
         connect()
     my_socket_list = temp_socket_list
-    read_list = temp_socket_list
-    read_list.append(tcp_server_socket)
 
 
 
@@ -356,7 +358,7 @@ def connect() :
                     continue
 
                 print("The connection with ", sockfl.getpeername(), " has been sent")
-
+    
                 # run peer-to-peer handshaking procedure
                 hs_msg = "P:"+roomname+":"+username+":"+my_add+":"+my_port+":"+str(msgID)+"::\r\n"
 
@@ -619,12 +621,11 @@ def do_Poke():
 
 
 def do_Quit():
-    global  my_socket_list, socket_room_server, udp_server_socket, tcp_server_socket
+    global  my_socket_list, socket_room_server, udp_server_socket
 
     # close sockets
     socket_room_server.close()
     udp_server_socket.close()
-    tcp_server_socket.close()
     for sock in my_socket_list:
         sock[0].close()
 
