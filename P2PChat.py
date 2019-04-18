@@ -119,7 +119,6 @@ class listen_to_tcp(threading.Thread):
         with lock_peer_list:
             pList = copy.deepcopy(peer_list)
 
-
         tcp_server_socket = socket.socket()
         tcp_server_index = pList.index(username)
         tcp_server_address = pList[tcp_server_index+1]
@@ -137,7 +136,7 @@ class listen_to_tcp(threading.Thread):
             for sock_tuple in my_socket_list:
                 read_list.append(sock_tuple[0]) 
             #print("Read List: " + str(read_list))
-            
+
             # use select to implement listening
             Rready, Wready, Eready = select.select(read_list, [], [], 1.0)
 
@@ -160,8 +159,8 @@ class listen_to_tcp(threading.Thread):
                             print("Socket accept error: ", err)
 
                         print("TCP Connection established ")
+                        my_socket_list.append((new, who[1]))
 
-                        my_socket_list.append((new,who[1]))
 
                     # else is a client socket being ready
                     # that means a message is waiting or
@@ -184,7 +183,7 @@ class listen_to_tcp(threading.Thread):
                                 peer_name = message.decode("ascii").split(':')[2]
 
                                 if is_room_mate(peer_name) and peer_name != forward_link[0]:
-                                # establish backward connection
+                                    # establish backward connection
                                     msg = "S:"+str(msgID)+"::\r\n"
                                     try:
                                         fd.send(msg.encode("ascii"))
@@ -193,6 +192,11 @@ class listen_to_tcp(threading.Thread):
                                     else:
                                         my_backward_links.append(peer_name)
                                         CmdWin.insert(1.0, "\n"+peer_name+" connected to me.")
+
+                                    # add the backward link to my_link_list
+                                    my_socket_list.append((fd, peer_name))
+
+
                                 else:
                                     # unknow peer, remove connection
                                     read_list.remove(fd)
@@ -201,7 +205,7 @@ class listen_to_tcp(threading.Thread):
 
                             elif message.decode("ascii").split(':')[0] == 'T':
                             # if a TEXT msg
-                                print("in handle_receiving_message, the received message is", message.decode("ascii"), "from ", str(sock.getpeername()))
+                                print("in handle_receiving_message, the received message is", message.decode("ascii"))
                                 rmsgs = message.decode('ascii').split(":")
                                 text_roomname  =  rmsgs[1]
                                 if text_roomname != roomname:   # not in the same chatroom
@@ -217,7 +221,7 @@ class listen_to_tcp(threading.Thread):
 
                                         with lock_messageID:
                                             msgID = int(messageID_rcv)
-                                            last_message = rmsg
+                                            last_message = rmsgs
 
                                         #display msg
                                         CmdWin.insert(1.0, "\n[" + sending_user + "] " + msg)
@@ -368,13 +372,12 @@ def connect() :
                 print("Sent hand-shaking msg")
                 time.sleep(2.0)
 
+                message=''
                 # try to receive hand-shaking reply
                 try:
                     message = sockfl.recv(1024)
                 except socket.error as err:
                     print("Recv error: ", err) 
-
-                print("processing msg")
                     
                 if message:
                     if message.decode("ascii").split(":")[0]=='S':
@@ -383,14 +386,14 @@ def connect() :
                         # update forward_link to indicate this link
                         forward_link = (peer_name, peer_add, peer_port)
 
-                        # add socket to my_socket_list
-                        my_socket_list.append((sockfl, peer_port))
+                        # add forward link to my_socket_list
+                        my_socket_list.append((sockfl, peer_name))
 
                         CmdWin.insert(1.0, "\n"+"Successfully linked to the group - via "+peer_name)
                         return None          #jump out of the function
 
                 else:
-                    CmdWin.insert(1.0, "\nBad message from my forward")
+                    print("cannot receive msg")
 
                 # hand-shaking procedure not successful
                 start = (start+1) % len(gList)
@@ -407,7 +410,7 @@ def send_msg(msg):
     send_list = my_socket_list
     CmdWin.insert(1.0, "\nRelay the message to other peers")
     for sock_tuple in send_list:
-        socket = sock_tuple[0]
+        sock = sock_tuple[0]
         try:
             sock.send(msg.encode('ascii'))
             print("Send message to " + str(sock.getpeername()))
