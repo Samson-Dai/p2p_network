@@ -28,7 +28,8 @@ roomname = ''
 msid = ''
 join_msg = ''
 my_backward_links = []
-msgID = 0
+msgID = 0   # ID of last received message
+last_message = "" # content of last message
 forward_link = ('','','')  #name, add, port
 joined = False
 keep_alive = False
@@ -43,6 +44,7 @@ udp_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)
 
 ## locks
 lock_peer_list = threading.Lock() # lock for accessing peer_list
+lock_messageID = threading.Lock() # lock for accessing msgID
 
 #
 # This is the hash function for generating a unique
@@ -113,7 +115,7 @@ class listen_to_tcp(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        global lock_peer_list, username, peer_list, roomname
+        global lock_peer_list, username, peer_list, roomname, receiving_message, msgID, lock_messageID
 
         tcp_server_socket = socket.socket()
 
@@ -176,6 +178,7 @@ class listen_to_tcp(threading.Thread):
                                 peer_name = message.decode("ascii").split(':')[2]
 
                                 if is_room_mate(peer_name) and peer_name != forward_link[0]:
+                                # establish backward connection
                                     msg = "S:"+str(msgID)+"::\r\n"
                                     try:
                                         fd.send(msg.encode("ascii"))
@@ -190,14 +193,31 @@ class listen_to_tcp(threading.Thread):
                                     write_list.remove(fd) 
                                     fd.close()
                                     print("Unknown person connect to me, so scared i closed the connection")
+
                             elif message.decode("ascii").split(':')[0] == 'T':
                             # if a TEXT msg
-                                text_roomname  =  message.decode("ascii").split(':')[1]
+                                print("in handle_receiving_message, the received message is", rmsg.decode("ascii"), "from ", str(sock.getpeername()))
+                                rmsgs = rmsg.decode('ascii').split(":")
+                                text_roomname  =  rmsgs[1]
                                 if text_roomname != roomname:   # not in the same chatroom
                                     CmdWin.insert(1.0, "\n Error: Received message not from this chatroom.")
                                 else:
+                                        sending_user = rmsgs[3]
+                                        messageID_rcv = rmsgs[4]
+                                        CmdWin.insert(1.0, "\nReceived message from " + sending_user)
+                                        print("Received message from " + sending_user)
+                                        if int(messageID_rcv) > msgID: # a new message incoming
+                                            msg = rmsgs[6]  # extracting the msg content
+                                            with lock_messageID:
+                                                msgID = int(messageID_rcv)
+                                                last_message = rmsg
 
-
+                                            #todo    
+                                            with lock_send_message:
+                                                need_to_send_msg = True
+                                            CmdWin.insert(1.0, "\n[" + sending_user + "] " + msg)
+                                        else:
+                                            CmdWin.insert(1.0, "\nError: This message has been received before.")
 
                         else:
                             print("A connection is broken")
@@ -256,10 +276,16 @@ def send_join_msg():
 def update_socket_list():
     global my_socket_list, peer_list
 
+    with lock_peer_list:
+        pList = peer_list
+
     temp_socket_list = copy.deepcopy(my_socket_list)
     for socket_member in my_socket_list:
-        if socket_member[0] not in peer_list:
+        if socket_member[0] not in pList:
             temp_socket_list.remove(socket_member)
+
+    if forward_link[0] not in pList:    # try to reconnect if forward link quits
+        connect()
     my_socket_list = temp_socket_list
 
 
@@ -486,7 +512,33 @@ def do_Join():
 
 
 def do_Send():
-    CmdWin.insert(1.0, "\nPress Send")
+    global roomname, username, joined, room_member_list, socket_list, messageID
+    CmdWin.insert(1.0, "\n")
+
+    msg_to_send = userentry.get()
+    userentry.delete(0, END)
+    # only take actions if there's input
+    if msg_to_send:
+        if not joined: # the user has not joined any chatroom yet
+            CmdWin.insert(1.0, "\nNot in any chatroom yet. Join one first.")
+        else:
+            msgID += 1
+
+            #Ivy
+            hid = 0xffffffffffffffff
+            for member in room_member_list:
+                if member[0] == username:
+                    hid = member[3]
+            msgLength = len(msg)
+
+            # forward the message together with msgID to every connecting peer
+            smsg = "T:" + roomname + ":" + str(hid) + ":" + username + ":" + str(messageID) + ":" + str(msgLength) + ":" + msg + "::\r\n"
+
+            print("number of sockets in socket_list: ", len(socket_list))
+            send_msg(smsg)
+
+            # display username and message content to MsgWin
+            MsgWin.insert(1.0, "\n[" + username + "] " + msg)
 
 
 def do_Poke():
