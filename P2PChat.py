@@ -37,7 +37,7 @@ connected = False
 
 
 ## sockets 
-my_socket_list = []         # the list of sockets used by forward link and backward links, [(peer,name)] 
+my_socket_list = []         # the list of sockets used by forward link and backward links, [(peer,socket)] 
 read_list = []
 socket_room_server = socket.socket()        #socket used to connect with room server
 tcp_server_socket = socket.socket()
@@ -156,7 +156,7 @@ class listen_to_tcp(threading.Thread):
                         except socket.error as err:
                             print("Socket accept error: ", err)
 
-                        my_socket_list.append(new)
+                        my_socket_list.append((new,who[1]))
                         read_list.append(new)
                         
 
@@ -285,7 +285,7 @@ def update_socket_list():
 
     temp_socket_list = my_socket_list
     for socket_member in my_socket_list:
-        if socket_member[0] not in pList:
+        if socket_member[1] not in pList:
             temp_socket_list.remove(socket_member)
 
     if forward_link[0] not in pList:    # try to reconnect if forward link quits
@@ -382,7 +382,7 @@ def connect() :
                         forward_link = (peer_name, peer_add, peer_port)
 
                         # add socket to my_socket_list
-                        my_socket_list.append((peer_name,sockfl))
+                        my_socket_list.append((sockfl, peer_port))
 
                         CmdWin.insert(1.0, "\n"+"Successfully linked to the group - via "+peer_name)
                         return None          #jump out of the function
@@ -404,7 +404,8 @@ def send_msg(msg):
 
     send_list = my_socket_list
     CmdWin.insert(1.0, "\nRelay the message to other peers")
-    for sock in send_list:
+    for sock_tuple in send_list:
+        socket = sock_tuple[0]
         try:
             sock.send(msg.encode('ascii'))
             print("Send message to " + str(sock.getpeername()))
@@ -625,7 +626,7 @@ def do_Quit():
     udp_server_socket.close()
     tcp_server_socket.close()
     for sock in my_socket_list:
-        sock.close()
+        sock[0].close()
 
     CmdWin.insert(1.0, "\nPress Quit")
     sys.exit(0)
