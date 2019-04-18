@@ -38,7 +38,9 @@ connected = False
 
 ## sockets 
 my_socket_list = []         # the list of sockets used by forward link and backward links, [(peer,name)] 
+read_list = []
 socket_room_server = socket.socket()        #socket used to connect with room server
+tcp_server_socket = socket.socket()
 udp_server_socket = socket.socket(family=socket.AF_INET, type=socket.SOCK_DGRAM)    #tcp socket for POKE
 
 ## locks
@@ -114,9 +116,7 @@ class listen_to_tcp(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
     def run(self):
-        global lock_peer_list, username, peer_list, roomname, receiving_message, msgID, lock_messageID
-
-        tcp_server_socket = socket.socket()
+        global lock_peer_list, username, peer_list, roomname, receiving_message, msgID, lock_messageID, read_list, tcp_server_socket
 
         with lock_peer_list:
             pList = copy.deepcopy(peer_list)
@@ -131,13 +131,16 @@ class listen_to_tcp(threading.Thread):
         # listen
         tcp_server_socket.listen(5)
 
+        read_list = [tcp_server_socket]
 
         while True:
+
             # use select to implement listening
             Rready, Wready, Eready = select.select(read_list, [], [], 1.0)
 
             # if has incoming activities
             if Rready:
+                print("income event ready###############################################")
 
                 # for each socket in the READ ready list
                 for fd in Rready:
@@ -154,6 +157,7 @@ class listen_to_tcp(threading.Thread):
                             print("Socket accept error: ", err)
 
                         my_socket_list.append(new)
+                        read_list.append(new)
                         
 
 
@@ -188,7 +192,6 @@ class listen_to_tcp(threading.Thread):
                                 else:
                                     # unknow peer, remove connection
                                     read_list.remove(fd)
-                                    write_list.remove(fd) 
                                     fd.close()
                                     print("Unknown person connect to me, so scared i closed the connection")
 
@@ -224,7 +227,6 @@ class listen_to_tcp(threading.Thread):
                         else:
                             print("A connection is broken")
                             read_list.remove(fd)
-                            write_list.remove(fd)   
                             fd.close()                 
 
 
@@ -281,7 +283,7 @@ def update_socket_list():
     with lock_peer_list:
         pList = copy.deepcopy(peer_list)
 
-    temp_socket_list = copy.deepcopy(my_socket_list)
+    temp_socket_list = my_socket_list
     for socket_member in my_socket_list:
         if socket_member[0] not in pList:
             temp_socket_list.remove(socket_member)
@@ -289,6 +291,9 @@ def update_socket_list():
     if forward_link[0] not in pList:    # try to reconnect if forward link quits
         connect()
     my_socket_list = temp_socket_list
+    read_list = temp_socket_list
+    read_list.append(tcp_server_socket)
+
 
 
 def is_room_mate(peer_name):
@@ -350,7 +355,7 @@ def connect() :
                     start = (start+1) % len(gList)
                     continue
 
-                print("The connection with ", sockfl.getpeername(), " has been established")
+                print("The connection with ", sockfl.getpeername(), " has been sent")
 
                 # run peer-to-peer handshaking procedure
                 hs_msg = "P:"+roomname+":"+username+":"+my_add+":"+my_port+":"+str(msgID)+"::\r\n"
@@ -397,7 +402,7 @@ def connect() :
 def send_msg(msg):
     global my_socket_list
 
-    send_list = copy.deepcopy(my_socket_list)
+    send_list = my_socket_list
     CmdWin.insert(1.0, "\nRelay the message to other peers")
     for sock in send_list:
         try:
@@ -516,22 +521,22 @@ def do_Join():
 
                         # if keep_alive:
                         my_keep_alive_thread = keep_alive_thread()
-                        my_keep_alive_threadset.Daemon(True)
+                        my_keep_alive_thread.setDaemon(True)
                         my_keep_alive_thread.start()
 
                         # start listening to UDP requests
                         my_listen_thread = listen_to_udp_request()
-                        my_listen_thread.Daemon(True)
+                        my_listen_thread.setDaemon(True)
                         my_listen_thread.start()
 
                         # connect to a peer
                         my_forward_connect_thread = forward_connect()
-                        my_forward_connect_thread.Daemon(True)
+                        my_forward_connect_thread.setDaemon(True)
                         my_forward_connect_thread.start()
 
                         # listening to TCP connections
                         my_tcp_listen_thread = listen_to_tcp()
-                        my_tcp_listen_thread.Daemon(True)
+                        my_tcp_listen_thread.setDaemon(True)
                         my_tcp_listen_thread.start()
 
 
@@ -613,11 +618,12 @@ def do_Poke():
 
 
 def do_Quit():
-    global  my_socket_list, socket_room_server, udp_server_socket
+    global  my_socket_list, socket_room_server, udp_server_socket, tcp_server_socket
 
     # close sockets
     socket_room_server.close()
     udp_server_socket.close()
+    tcp_server_socket.close()
     for sock in my_socket_list:
         sock.close()
 
